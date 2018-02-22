@@ -6,16 +6,30 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/stat.h>
-      
+#include <sys/sem.h>
+
 #define SIZE 16
-    
-int main ()
+
+
+int main (int argc, char** argv)
 {
+   int semId; 
+   struct sembuf sb[2];
+   //semctl(semId, 0, SETVAL, 1);
    int status;
    long int i, loop, temp, *shmPtr;
    int shmId;
    pid_t pid;
 
+   semId = semget(IPC_PRIVATE, 1, 00600);
+   sb[0].sem_num = 0;
+   sb[0].sem_op = 1;
+   sb[0].sem_flg = 0;
+
+   sb[1].sem_num = 0;
+   sb[1].sem_op = -1;
+   sb[1].sem_flg = 0;
+   loop = atoi(argv[1]);
       // get value of loop variable (from command-line argument)
 
    if ((shmId = shmget (IPC_PRIVATE, SIZE, IPC_CREAT|S_IRUSR|S_IWUSR)) < 0) {
@@ -30,9 +44,15 @@ int main ()
    shmPtr[0] = 0;
    shmPtr[1] = 1;
 
-   if (!(pid = fork())) {
+   if (!(pid = fork())) {   
+      
       for (i=0; i<loop; i++) {
+	 semop(semId, &sb[0], 1);	 
                // swap the contents of shmPtr[0] and shmPtr[1]
+         temp = shmPtr[0];
+	 shmPtr[0] = shmPtr[1];
+	 shmPtr[1] = temp;
+	 
       }
       if (shmdt (shmPtr) < 0) {
          perror ("just can't let go\n");
@@ -40,8 +60,13 @@ int main ()
       }
       exit(0);
    }
-   else
+   else   
+      
       for (i=0; i<loop; i++) {
+	 semop(semId, &sb[1], 1);
+         temp = shmPtr[0];
+	 shmPtr[0] = shmPtr[1];
+	 shmPtr[1] = temp;
                // swap the contents of shmPtr[1] and shmPtr[0]
       }
 
@@ -56,6 +81,6 @@ int main ()
       perror ("can't deallocate\n");
       exit(1);
    }
-
+   semctl(semId, 0, IPC_RMID);
    return 0;
 }
