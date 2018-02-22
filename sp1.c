@@ -11,24 +11,43 @@
 #define SIZE 16
 
 
+union senum{ //Semaphore value
+   int val;
+   struct semid_ds *buf;
+   ushort *array;
+};
+
+void lock(int id){//Locks semaphore
+   struct sembuf sb;
+
+   sb.sem_num = 0;
+   sb.sem_op = -1;
+   sb.sem_flg = 0;
+   semop(id, &sb, 1);
+}
+
+void unlock(int id){//Unlocks semaphore
+   struct sembuf sb;
+
+   sb.sem_num = 0;
+   sb.sem_op = 1;
+   sb.sem_flg = 0;
+   semop(id, &sb, 1);
+}
+
 int main (int argc, char** argv)
-{
+{ 
+   union senum sem_val;
    int semId; 
-   struct sembuf sb[2];
-   //semctl(semId, 0, SETVAL, 1);
    int status;
    long int i, loop, temp, *shmPtr;
    int shmId;
    pid_t pid;
 
-   semId = semget(IPC_PRIVATE, 1, 00600);
-   sb[0].sem_num = 0;
-   sb[0].sem_op = 1;
-   sb[0].sem_flg = 0;
-
-   sb[1].sem_num = 0;
-   sb[1].sem_op = -1;
-   sb[1].sem_flg = 0;
+   semId = semget(IPC_PRIVATE, 1, IPC_CREAT|0600);
+   sem_val.val = 1;
+   semctl(semId, 0, SETVAL, sem_val);
+   
    loop = atoi(argv[1]);
       // get value of loop variable (from command-line argument)
 
@@ -43,16 +62,16 @@ int main (int argc, char** argv)
 
    shmPtr[0] = 0;
    shmPtr[1] = 1;
-
+   //semop(semId, SIGNAL1[0], 1);
    if (!(pid = fork())) {   
       
       for (i=0; i<loop; i++) {
-	 semop(semId, &sb[0], 1);	 
+	 lock(semId);	 
                // swap the contents of shmPtr[0] and shmPtr[1]
          temp = shmPtr[0];
 	 shmPtr[0] = shmPtr[1];
 	 shmPtr[1] = temp;
-	 
+	 unlock(semId);
       }
       if (shmdt (shmPtr) < 0) {
          perror ("just can't let go\n");
@@ -63,10 +82,11 @@ int main (int argc, char** argv)
    else   
       
       for (i=0; i<loop; i++) {
-	 semop(semId, &sb[1], 1);
+	 lock(semId);
          temp = shmPtr[0];
 	 shmPtr[0] = shmPtr[1];
 	 shmPtr[1] = temp;
+	 unlock(semId);
                // swap the contents of shmPtr[1] and shmPtr[0]
       }
 
@@ -81,6 +101,6 @@ int main (int argc, char** argv)
       perror ("can't deallocate\n");
       exit(1);
    }
-   semctl(semId, 0, IPC_RMID);
+   semctl(semId, 0, IPC_RMID);//Destroy semaphore
    return 0;
 }
